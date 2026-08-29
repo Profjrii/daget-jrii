@@ -157,13 +157,13 @@
   // admin may change grid → rebuild fresh
   gridSel.addEventListener('change', () => start());
 
-  // ---------- QR loading from server ----------
-  // /qr.png is the QR the owner set on the server — everyone uses it.
+  // ---------- QR loading ----------
+  // qr.png lives in the repo (owner-synced) — everyone uses it. Works on static hosting.
   function loadServerQr() {
     const im = new Image();
-    im.onload = () => { img = im; qrMeta.textContent = 'QR dari server — dipasang owner'; start(); };
+    im.onload = () => { img = im; qrMeta.textContent = 'QR dipasang owner — DAGET JRII'; start(); };
     im.onerror = () => { drawDefaultQr(); qrMeta.textContent = 'Belum ada QR — pakai contoh'; start(); };
-    im.src = '/qr.png?t=' + Date.now();
+    im.src = 'qr.png?t=' + Date.now();
   }
 
   function drawDefaultQr() {
