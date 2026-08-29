@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>QR JIGSAW</title>
+<style>
+  :root{
+    --bg:#0a0a0f; --panel:#13131c; --line:#23233a; --txt:#e8e8f0; --dim:#8a8aa0;
+    --neon:#00e5a0; --neon2:#00b3ff; --warn:#ffcc00; --red:#ff4d6d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; background:radial-gradient(1200px 600px at 20% -10%, #14213a, var(--bg) 60%);
+    color:var(--txt); font-family:ui-monospace,'JetBrains Mono',Menlo,monospace; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:16px;}
+  h1{font-size:clamp(18px,4vw,26px); letter-spacing:.12em; text-transform:uppercase; margin:6px 0 2px;
+    background:linear-gradient(90deg,var(--neon),var(--neon2)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .sub{color:var(--dim); font-size:12px; margin-bottom:12px; text-align:center;}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; width:min(92vw,520px); margin-bottom:12px;}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:center;}
+  button{background:#1c1c2c; color:var(--txt); border:1px solid var(--line); border-radius:10px; padding:8px 14px;
+    font-family:inherit; font-size:13px; cursor:pointer; transition:.15s;}
+  button:hover{border-color:var(--neon); color:var(--neon);}
+  button.primary{background:linear-gradient(90deg,#00e5a0,#00b3ff); color:#02120c; font-weight:700; border:none;}
+  button.primary:hover{filter:brightness(1.15); color:#02120c;}
+  select{background:#1c1c2c; color:var(--txt); border:1px solid var(--line); border-radius:10px; padding:8px; font-family:inherit;}
+  input[type=text], input[type=password]{background:#1c1c2c; color:var(--txt); border:1px solid var(--line); border-radius:10px; padding:8px; font-family:inherit; width:100%; margin-top:8px;}
+  input[type=file]{font-size:12px; color:var(--dim); width:100%; margin-top:8px;}
+  .board-wrap{position:relative; margin:14px auto; width:min(92vw,420px); aspect-ratio:1/1; user-select:none; touch-action:none;}
+  #board{position:absolute; inset:0; border:2px solid var(--line); border-radius:10px; overflow:hidden; background:#000;}
+  .tile{position:absolute; background-size:100% 100%; background-repeat:no-repeat; cursor:grab; transition:box-shadow .12s;
+    box-shadow:0 0 0 1px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.5);}
+  .tile.dragging{cursor:grabbing; z-index:50; box-shadow:0 0 0 2px var(--neon), 0 8px 24px rgba(0,229,160,.35);}
+  .tile.correct{box-shadow:0 0 0 1px rgba(0,229,160,.55), 0 2px 8px rgba(0,0,0,.5);}
+  .stats{display:flex; justify-content:space-between; font-size:13px; color:var(--dim); padding:0 4px; width:min(92vw,420px);}
+  .stats b{color:var(--txt);}
+  #win{display:none; position:fixed; inset:0; z-index:100; background:rgba(4,8,12,.88); backdrop-filter:blur(6px);
+    align-items:center; justify-content:center; flex-direction:column; text-align:center; padding:20px;}
+  #win.show{display:flex;}
+  #win h2{color:var(--neon); font-size:clamp(20px,5vw,32px); letter-spacing:.1em; margin:0 0 6px; text-transform:uppercase;
+    text-shadow:0 0 18px rgba(0,229,160,.6);}
+  #win .p{color:var(--dim); font-size:13px; margin-bottom:14px;}
+  #fullQr{width:min(70vw,300px); height:auto; border-radius:12px; padding:10px; background:#fff; box-shadow:0 0 40px rgba(0,229,160,.35);}
+  #win button{margin-top:16px;}
+  .hint{font-size:11px; color:var(--dim); text-align:center; margin-top:6px; width:min(92vw,420px);}
+  .tag{display:inline-block; background:#00e5a0; color:#02120c; font-weight:700; border-radius:6px; padding:2px 8px; font-size:11px; letter-spacing:.08em;}
+  /* admin */
+  #adminPanel{display:none; border:1px solid var(--warn); border-radius:14px; padding:14px; width:min(92vw,520px); margin-bottom:12px; background:var(--panel);}
+  #adminPanel.show{display:block;}
+  .admin-btn{background:#2a2410; border-color:#6b5b1a; color:var(--warn);}
+  .admin-btn:hover{border-color:var(--warn); color:var(--warn);}
+  .tiny{font-size:11px; color:var(--dim); margin-top:6px;}
+  #authModal{display:none; position:fixed; inset:0; z-index:90; background:rgba(4,8,12,.9); align-items:center; justify-content:center;}
+  #authModal.show{display:flex;}
+  .modal-box{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; width:min(88vw,340px); text-align:center;}
+  .modal-box h3{margin:0 0 6px; color:var(--neon); letter-spacing:.1em;}
+  .err{color:var(--red); font-size:12px; min-height:16px;}
+  .qr-meta{font-size:11px; color:var(--dim); margin-top:8px; text-align:center;}
+</style>
+</head>
+<body>
+  <h1>DAGET JRII</h1>
+  <div class="sub">Susun potongan biar QR kebuka</div>
+
+  <div class="qr-meta" id="qrMeta"></div>
+
+  <div class="panel" id="gamePanel">
+    <div class="row" id="adminControls" style="display:none">
+      <span class="tag">GRID</span>
+      <select id="gridSel">
+        <option value="3" selected>3×3</option>
+        <option value="4">4×4</option>
+        <option value="5">5×5</option>
+      </select>
+      <button id="scrambleBtn" class="primary">🔀 Acak Ulang</button>
+    </div>
+  </div>
+
+  <div id="adminPanel">
+    <div class="row" style="justify-content:space-between">
+      <b style="color:var(--warn)">🛠 MODE ADMIN</b>
+      <button id="closeAdmin" class="admin-btn">✕ Tutup</button>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+    <input type="text" id="urlInput" placeholder="Atau tempel URL gambar QR…">
+    <div class="row" style="margin-top:8px">
+      <button id="uploadBtn" class="admin-btn">📁 Set QR (upload)</button>
+      <button id="setUrlBtn" class="admin-btn">🌐 Set QR (URL)</button>
+    </div>
+    <div class="tiny">QR ini yang dipasang buat SEMUA orang yang buka link — mereka cuma nyusun puzzle, gak bisa ganti QR.</div>
+    <div class="err" id="adminMsg"></div>
+  </div>
+
+  <div class="stats">
+    <span>🎯 <b id="moves">0</b> gerakan</span>
+    <span>⏱ <b id="timer">00:00</b></span>
+    <span id="progress">🧩 0 / 0</span>
+  </div>
+
+  <div class="board-wrap"><div id="board"></div></div>
+  <div class="hint">Drag & letakkan potongan ke posisi yang bener. Pas semua nyambung → QR kebuka buat di-scan.</div>
+
+  <div id="win">
+    <h2>✅ Solved!</h2>
+    <p class="p">QR udah utuh —<br>silakan scan sekarang.</p>
+    <img id="fullQr" alt="QR full">
+    <button id="againBtn" class="primary">Main Lagi 🔀</button>
+  </div>
+
+  <div id="authModal">
+    <div class="modal-box">
+      <h3>🔐 ADMIN ACCESS</h3>
+      <input type="password" id="pinInput" placeholder="PIN admin…">
+      <div class="err" id="pinErr"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="pinOk" class="primary">Masuk</button>
+        <button id="pinCancel">Batal</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const board = $('board'), gridSel = $('gridSel'), scrambleBtn = $('scrambleBtn');
+  const movesEl = $('moves'), timerEl = $('timer'), progressEl = $('progress');
+  const win = $('win'), fullQr = $('fullQr'), againBtn = $('againBtn');
+  const adminPanel = $('adminPanel'), adminMsg = $('adminMsg');
+  const fileInput = $('fileInput'), urlInput = $('urlInput');
+  const uploadBtn = $('uploadBtn'), setUrlBtn = $('setUrlBtn'), closeAdmin = $('closeAdmin');
+  const authModal = $('authModal'), pinInput = $('pinInput'), pinOk = $('pinOk'), pinCancel = $('pinCancel'), pinErr = $('pinErr');
+  const qrMeta = $('qrMeta');
+
+  const ADMIN_PIN = '7777'; // GANTI PIN INI
+  let img = null, grid = 3, tiles = [], moves = 0, t0 = 0, timerInt = null, drag = null;
+  let boardSize = 420;
+  let isAdmin = false;
+
+  // ---------- admin auth : ?admin or PIN ----------
+  const params = new URLSearchParams(location.search);
+  if (params.get('admin') === '1') isAdmin = true;
+  if (params.get('pin') === ADMIN_PIN) isAdmin = true;
+  if (isAdmin) adminPanel.classList.add('show');
+  // grid controls only for admin (visitors: fixed 3×3, solve only)
+  if (isAdmin) {
+    $('adminControls').style.display = 'flex';
+  } else {
+    grid = 3;
+    gridSel.value = '3';
+  }
+
+  pinOk.addEventListener('click', () => {
+    if (pinInput.value === ADMIN_PIN) { isAdmin = true; adminPanel.classList.add('show'); $('adminControls').style.display = 'flex'; authModal.classList.remove('show'); }
+    else { pinErr.textContent = 'PIN salah!'; pinInput.value = ''; }
+  });
+  pinCancel.addEventListener('click', () => authModal.classList.remove('show'));
+
+  // admin may change grid → rebuild fresh
+  gridSel.addEventListener('change', () => start());
+
+  // ---------- QR loading from server ----------
+  // /qr.png is the QR the owner set on the server — everyone uses it.
+  function loadServerQr() {
+    const im = new Image();
+    im.onload = () => { img = im; qrMeta.textContent = 'QR dari server — dipasang owner'; start(); };
+    im.onerror = () => { drawDefaultQr(); qrMeta.textContent = 'Belum ada QR — pakai contoh'; start(); };
+    im.src = '/qr.png?t=' + Date.now();
+  }
+
+  function drawDefaultQr() {
+    const c = document.createElement('canvas');
+    c.width = 640; c.height = 640;
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, 640, 640);
+    const m = 21, cell = Math.floor(640 / m);
+    let s = 20260829;
+    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+    for (let r = 0; r < m; r++) for (let cc = 0; cc < m; cc++) {
+      const inFinder = (r < 7 && cc < 7) || (r < 7 && cc >= m-7) || (r >= m-7 && cc < 7);
+      if (inFinder) continue;
+      if (rnd() > 0.52) x.fillRect(cc * cell, r * cell, cell, cell);
+    }
+    const fp = (ox, oy) => {
+      x.fillStyle = '#000'; x.fillRect(ox*cell, oy*cell, 7*cell, 7*cell);
+      x.fillStyle = '#fff'; x.fillRect((ox+1)*cell, (oy+1)*cell, 5*cell, 5*cell);
+      x.fillStyle = '#000'; x.fillRect((ox+2)*cell, (oy+2)*cell, 3*cell, 3*cell);
+    };
+    fp(0,0); fp(m-7,0); fp(0,m-7);
+    x.fillStyle = '#000'; x.fillRect((m-9)*cell, (m-9)*cell, 5*cell, 5*cell);
+    x.fillStyle = '#fff'; x.fillRect((m-8)*cell, (m-8)*cell, 3*cell, 3*cell);
+    x.fillStyle = '#000'; x.fillRect((m-7)*cell, (m-7)*cell, cell, cell);
+    img = c;
+  }
+
+  // ---------- admin: set QR on server ----------
+  function setQr(dataUrl, cb) {
+    fetch('/set-qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ img: dataUrl }),
+    }).then(r => r.json()).then(j => {
+      if (j.ok) { adminMsg.textContent = '✅ QR ke-set! Semua visitor sekarang dapet QR ini.'; cb && cb(); }
+      else adminMsg.textContent = '❌ ' + (j.err || 'gagal');
+    }).catch(e => adminMsg.textContent = '❌ network err: ' + e.message.slice(0, 60));
+  }
+
+  uploadBtn.addEventListener('click', () => {
+    const f = fileInput.files[0];
+    if (!f) { adminMsg.textContent = 'pilih file dulu'; return; }
+    const r = new FileReader();
+    r.onload = () => setQr(r.result, () => { loadServerQr(); });
+    r.readAsDataURL(f);
+  });
+  setUrlBtn.addEventListener('click', () => {
+    const u = urlInput.value.trim();
+    if (!u) { adminMsg.textContent = 'isi URL dulu'; return; }
+    // server fetches it
+    setQr(u, () => { loadServerQr(); });
+  });
+  closeAdmin.addEventListener('click', () => adminPanel.classList.remove('show'));
+
+  // ---------- board ----------
+  function layout() {
+    const wrap = document.querySelector('.board-wrap');
+    boardSize = Math.min(wrap.clientWidth, 420);
+    wrap.style.height = boardSize + 'px';
+    board.innerHTML = '';
+  }
+
+  function start() {
+    clearInterval(timerInt);
+    moves = 0; movesEl.textContent = '0';
+    t0 = Date.now();
+    timerInt = setInterval(() => {
+      const s = Math.floor((Date.now() - t0) / 1000);
+      timerEl.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    }, 1000);
+    win.classList.remove('show');
+    layout();
+    buildTiles();
+    shuffle();
+    render();
+  }
+
+  function buildTiles() {
+    grid = parseInt(gridSel.value, 10);
+    const size = boardSize / grid;
+    tiles = [];
+    const c = document.createElement('canvas');
+    const src = img;
+    const side = Math.min(src.width, src.height);
+    const sx = (src.width - side) / 2, sy = (src.height - side) / 2;
+    c.width = boardSize; c.height = boardSize;
+    const x = c.getContext('2d');
+    x.drawImage(src, sx, sy, side, side, 0, 0, boardSize, boardSize);
+    for (let r = 0; r < grid; r++) for (let cc = 0; cc < grid; cc++) {
+      const i = r * grid + cc;
+      const tc = document.createElement('canvas');
+      tc.width = size; tc.height = size;
+      tc.getContext('2d').drawImage(c, cc*size, r*size, size, size, 0, 0, size, size);
+      const el = document.createElement('div');
+      el.className = 'tile';
+      el.style.backgroundImage = `url(${tc.toDataURL()})`;
+      el.style.width = el.style.height = size + 'px';
+      el.dataset.orig = i;
+      board.appendChild(el);
+      tiles.push({ origIdx: i, slot: i, el });
+    }
+  }
+
+  function shuffle() {
+    const n = tiles.length;
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tiles[i].slot, tiles[j].slot] = [tiles[j].slot, tiles[i].slot];
+    }
+    if (tiles.every(t => t.slot === t.origIdx)) {
+      [tiles[0].slot, tiles[1].slot] = [tiles[1].slot, tiles[0].slot];
+    }
+  }
+
+  function render() {
+    const size = boardSize / grid;
+    const correct = tiles.filter(t => t.slot === t.origIdx).length;
+    tiles.forEach(t => {
+      const r = Math.floor(t.slot / grid), cc = t.slot % grid;
+      t.el.style.left = (cc * size) + 'px';
+      t.el.style.top = (r * size) + 'px';
+      t.el.classList.toggle('correct', t.slot === t.origIdx);
+    });
+    progressEl.textContent = `🧩 ${correct} / ${tiles.length}`;
+    if (correct === tiles.length && !win.classList.contains('show')) winGame();
+  }
+
+  // ---------- drag ----------
+  board.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('.tile');
+    if (!el) return;
+    const size = boardSize / grid;
+    const idx = tiles.findIndex(t => t.el === el);
+    const t = tiles[idx];
+    const rect = board.getBoundingClientRect();
+    const sx = Math.floor(t.slot % grid) * size, sy = Math.floor(t.slot / grid) * size;
+    drag = { t, idx, size, offX: e.clientX - rect.left - sx, offY: e.clientY - rect.top - sy, startSlot: t.slot };
+    el.classList.add('dragging');
+    el.style.zIndex = 50;
+    el.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  board.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const rect = board.getBoundingClientRect();
+    drag.t.el.style.left = (e.clientX - rect.left - drag.offX) + 'px';
+    drag.t.el.style.top = (e.clientY - rect.top - drag.offY) + 'px';
+  });
+  board.addEventListener('pointerup', (e) => {
+    if (!drag) return;
+    const rect = board.getBoundingClientRect();
+    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+    const size = drag.size;
+    let slotC = Math.max(0, Math.min(grid - 1, Math.floor(cx / size)));
+    let slotR = Math.max(0, Math.min(grid - 1, Math.floor(cy / size)));
+    const target = slotR * grid + slotC;
+    const occupant = tiles.find(t => t.slot === target && t !== drag.t);
+    if (occupant) {
+      occupant.slot = drag.startSlot;
+      drag.t.slot = target;
+      moves++; movesEl.textContent = moves;
+    } else {
+      drag.t.slot = target;
+    }
+    drag.t.el.classList.remove('dragging');
+    drag.t.el.style.zIndex = '';
+    drag = null;
+    render();
+  });
+
+  // ---------- win ----------
+  function winGame() {
+    clearInterval(timerInt);
+    const c = document.createElement('canvas');
+    const src = img;
+    const side = Math.min(src.width, src.height);
+    c.width = c.height = 720;
+    c.getContext('2d').drawImage(src, (src.width - side) / 2, (src.height - side) / 2, side, side, 0, 0, 720, 720);
+    fullQr.src = c.toDataURL();
+    win.classList.add('show');
+  }
+
+  againBtn.addEventListener('click', () => { win.classList.remove('show'); start(); });
+  scrambleBtn.addEventListener('click', () => start());
+
+  // ---------- init ----------
+  loadServerQr();
+})();
+</script>
+</body>
+</html>
